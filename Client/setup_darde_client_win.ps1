@@ -1,13 +1,14 @@
 # ==============================================================================
-# DCS-CAI-CLIENT: Connection & Certificate Setup (Windows) - V10.2
+# DARDE-CLIENT: Connection & Certificate Setup (Windows) - V11.0
 # ==============================================================================
 
-$Global:ServerIP = "192.168.0.25"
-$Global:ServerUser = "kwar" # Aggiornato con l'utente che ho visto nei tuoi log
-$Domains = @("ai.cai.lan", "api.cai.lan", "dsp.cai.lan")
-$TempCertPath = "$env:TEMP\caddy-root.crt"
+$Global:ServerIP = "10.0.0.50"
+$Global:ServerUser = "admin" 
+$Global:BaseDomain = "master.server01.local"
+$Global:Domains = @("ai.$Global:BaseDomain", "api.$Global:BaseDomain", "dsp.$Global:BaseDomain")
+$TempCertPath = "$env:TEMP\darde-root.crt"
 $HostsPath = "$env:windir\System32\drivers\etc\hosts"
-$Global:WorkDir = Join-Path -Path $env:USERPROFILE -ChildPath ".dcs-cai-client"
+$Global:WorkDir = Join-Path -Path $env:USERPROFILE -ChildPath ".darde-client"
 $Global:VenvDir = Join-Path -Path $Global:WorkDir -ChildPath ".venv"
 $Global:PipExe = Join-Path -Path $Global:VenvDir -ChildPath "Scripts\pip.exe"
 $Global:PythonExe = Join-Path -Path $Global:VenvDir -ChildPath "Scripts\python.exe"
@@ -24,16 +25,22 @@ if (-not $isAdmin) {
 
 function Prompt-Credentials {
     Write-Host "`n[ Network Configuration ]" -ForegroundColor Yellow
-    $InputIP = Read-Host "Enter the Server IP [Enter for: $Global:ServerIP]"
+    $InputIP = Read-Host "Enter the Gateway/Standalone IP [Enter for: $Global:ServerIP]"
     if (-not [string]::IsNullOrWhiteSpace($InputIP)) { $Global:ServerIP = $InputIP }
     
     $InputUser = Read-Host "Enter the Server User [Enter for: $Global:ServerUser]"
     if (-not [string]::IsNullOrWhiteSpace($InputUser)) { $Global:ServerUser = $InputUser }
+
+    $InputDomain = Read-Host "Enter the Base Domain (e.g., master.server01.local) [Enter for: $Global:BaseDomain]"
+    if (-not [string]::IsNullOrWhiteSpace($InputDomain)) { 
+        $Global:BaseDomain = $InputDomain 
+        $Global:Domains = @("ai.$Global:BaseDomain", "api.$Global:BaseDomain", "dsp.$Global:BaseDomain")
+    }
 }
 
 function Create-Dashboard {
     $DesktopDir = [Environment]::GetFolderPath("Desktop")
-    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DCS-CAI_Dashboard.html"
+    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DARDE_Dashboard.html"
     
     $HTMLContent = @"
 <!DOCTYPE html>
@@ -41,7 +48,7 @@ function Create-Dashboard {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DCS-CAI | Command Center</title>
+    <title>DARDE | Command Center</title>
     <style>
         body {
             font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -106,36 +113,35 @@ function Create-Dashboard {
 </head>
 <body>
     <div class="dashboard-container">
-        <h1>DCS-CAI System</h1>
+        <h1>DARDE System</h1>
         
-        <a href="https://ai.cai.lan" class="btn" target="_blank">
+        <a href="https://ai.$($Global:BaseDomain)" class="btn" target="_blank">
             Open WebUI
             <span class="desc">AI Chat Interface</span>
         </a>
         
-        <a href="https://api.cai.lan" class="btn" target="_blank">
+        <a href="https://api.$($Global:BaseDomain)" class="btn" target="_blank">
             Ollama API
             <span class="desc">Backend Services Endpoint</span>
         </a>
         
-        <a href="https://dsp.cai.lan" class="btn" target="_blank">
+        <a href="https://dsp.$($Global:BaseDomain)" class="btn" target="_blank">
             DSP Server
             <span class="desc">Host Management Panel</span>
         </a>
 
-        <div class="footer">DCS-CAI Local Infrastructure • Secure Connection</div>
+        <div class="footer">DARDE Local Infrastructure • Secure Connection</div>
     </div>
 </body>
 </html>
 "@
     Set-Content -Path $DashboardPath -Value $HTMLContent -Encoding UTF8
-    Write-Host "      -> File 'DCS-CAI_Dashboard.html' created on the Desktop." -ForegroundColor Green
+    Write-Host "      -> File 'DARDE_Dashboard.html' created on the Desktop." -ForegroundColor Green
 }
 
 function Install-Client {
     Prompt-Credentials
     Write-Host "`n[1/5] SSH connection for the certificate (Server Password Request)..." -ForegroundColor Cyan
-    # PATCH: Usa la wildcard per pescare il certificato dinamico dal server Linux
     scp "${Global:ServerUser}@${Global:ServerIP}:~/DARDE-*-root.crt" $TempCertPath
     
     if (-not (Test-Path $TempCertPath)) {
@@ -149,7 +155,7 @@ function Install-Client {
     Write-Host "      -> Certificate installed." -ForegroundColor Green
 
     Write-Host "`n[3/5] Local Route Configuration (Hosts File)..." -ForegroundColor Cyan
-    foreach ($domain in $Domains) {
+    foreach ($domain in $Global:Domains) {
         $exists = Select-String -Path $HostsPath -Pattern "\b$domain\b" -Quiet
         if (-not $exists) {
             cmd.exe /c "echo $Global:ServerIP`t$domain >> $HostsPath"
@@ -210,7 +216,8 @@ function Uninstall-Client {
 
     Write-Host "`n[2/4] Cleaning Hosts File..." -ForegroundColor Cyan
     $content = Get-Content $HostsPath
-    $newContent = $content | Where-Object { $_ -notmatch "cai\.lan" }
+    $escapedDomain = [regex]::Escape($Global:BaseDomain)
+    $newContent = $content | Where-Object { $_ -notmatch $escapedDomain }
     [System.IO.File]::WriteAllLines($HostsPath, $newContent)
     Write-Host "      -> Routes removed." -ForegroundColor Green
 
@@ -223,7 +230,7 @@ function Uninstall-Client {
 
     Write-Host "`n[4/4] Removing Dashboard HTML..." -ForegroundColor Cyan
     $DesktopDir = [Environment]::GetFolderPath("Desktop")
-    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DCS-CAI_Dashboard.html"
+    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DARDE_Dashboard.html"
     if (Test-Path $DashboardPath) {
         Remove-Item -Path $DashboardPath -Force
         Write-Host "      -> Dashboard removed." -ForegroundColor Green
@@ -242,7 +249,7 @@ function Diagnose-And-Heal {
 
     Write-Host "`n[TEST 1] Checking Hosts File: " -NoNewline
     $Missings = 0
-    foreach ($domain in $Domains) {
+    foreach ($domain in $Global:Domains) {
         if (-not (Select-String -Path $HostsPath -Pattern "\b$domain\b" -Quiet)) {
             $Missings++
             cmd.exe /c "echo $Global:ServerIP`t$domain >> $HostsPath"
@@ -260,7 +267,6 @@ function Diagnose-And-Heal {
         Write-Host "[FAILED] Certificate not found." -ForegroundColor Red
         Write-Host "  -> [FIX] Trying to download and install automatically..." -ForegroundColor Yellow
         Prompt-Credentials
-        # PATCH: Aggiornato per ripescare il file con wildcard durante l'auto-heal
         scp "${Global:ServerUser}@${Global:ServerIP}:~/DARDE-*-root.crt" $TempCertPath
         if (Test-Path $TempCertPath) {
             certutil.exe -addstore -f "Root" $TempCertPath | Out-Null
@@ -283,7 +289,7 @@ function Diagnose-And-Heal {
 
     Write-Host "[TEST 4] Checking Dashboard HTML: " -NoNewline
     $DesktopDir = [Environment]::GetFolderPath("Desktop")
-    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DCS-CAI_Dashboard.html"
+    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DARDE_Dashboard.html"
     if (-not (Test-Path $DashboardPath)) {
         Write-Host "[REPAIRED] Missing dashboard file. Recreating..." -ForegroundColor Yellow
         Create-Dashboard | Out-Null
@@ -329,7 +335,7 @@ function Show-Debug {
     Write-Host "`n--- CHECK ROUTES DNS (File Hosts) ---" -ForegroundColor Yellow
     $missing_routes = 0
     $HostsContent = Get-Content -Path $HostsPath -ErrorAction SilentlyContinue
-    foreach ($domain in $Domains) {
+    foreach ($domain in $Global:Domains) {
         if ($HostsContent -match "\b$domain\b") {
             Write-Host "  [ONLINE] $Global:ServerIP -> $domain" -ForegroundColor Green
         }
@@ -355,12 +361,12 @@ function Show-Debug {
 
     Write-Host "`n--- CHECK DASHBOARD DESKTOP ---" -ForegroundColor Yellow
     $DesktopDir = [Environment]::GetFolderPath("Desktop")
-    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DCS-CAI_Dashboard.html"
+    $DashboardPath = Join-Path -Path $DesktopDir -ChildPath "DARDE_Dashboard.html"
     if (Test-Path $DashboardPath) {
-        Write-Host "  [ONLINE] DCS-CAI_Dashboard.html" -ForegroundColor Green
+        Write-Host "  [ONLINE] DARDE_Dashboard.html" -ForegroundColor Green
     }
     else {
-        Write-Host "  [MISSING] DCS-CAI_Dashboard.html not found on Desktop" -ForegroundColor Red
+        Write-Host "  [MISSING] DARDE_Dashboard.html not found on Desktop" -ForegroundColor Red
     }
 
     Write-Host "`n--- PYTHON ENVIRONMENT ---" -ForegroundColor Yellow
@@ -380,12 +386,13 @@ function Show-Debug {
     }
 
     Write-Host "`n--- CHECK NETWORK CONNECTION ---" -ForegroundColor Yellow
-    $TcpTest = Test-NetConnection -ComputerName "ai.cai.lan" -Port 443 -WarningAction SilentlyContinue
+    $testDomain = "ai.$($Global:BaseDomain)"
+    $TcpTest = Test-NetConnection -ComputerName $testDomain -Port 443 -WarningAction SilentlyContinue
     if ($TcpTest.TcpTestSucceeded) {
-        Write-Host "  [NETWORK OK] ai.cai.lan resolved correctly to IP: $($TcpTest.RemoteAddress)" -ForegroundColor Green
+        Write-Host "  [NETWORK OK] $testDomain resolved correctly to IP: $($TcpTest.RemoteAddress)" -ForegroundColor Green
     }
     else {
-        Write-Host "  [NETWORK ERROR] Unable to reach ai.cai.lan." -ForegroundColor Red
+        Write-Host "  [NETWORK ERROR] Unable to reach $testDomain." -ForegroundColor Red
     }
 }
 
@@ -393,7 +400,7 @@ function Show-Debug {
 do {
     Clear-Host
     Write-Host "====================================================" -ForegroundColor Cyan
-    Write-Host " DCS-CAI CLIENT MANAGER (WINDOWS) - V10.2" -ForegroundColor Cyan
+    Write-Host " DARDE CLIENT MANAGER (WINDOWS) - V11.0" -ForegroundColor Cyan
     Write-Host "====================================================" -ForegroundColor Cyan
     Write-Host "1) Install Client Connection (Certificate + DNS + Env + Dashboard)"
     Write-Host "2) Uninstall and Restore PC"
