@@ -1,0 +1,27 @@
+# --- DARDE INFRASTRUCTURE STATE ---
+# Ignore topology and role states as they are machine-specific
+.darde_role
+topology.json
+
+# --- LOCAL CERTIFICATES & SECRETS ---
+*.crt
+*.key
+.env
+
+# --- PYTHON ARTIFACTS & ENVIRONMENTS ---
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# --- LOGS AND DATABASES ---
+*.log
+*.sqlite3
+
+# --- OS & EDITOR GENERATED FILES ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
