@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-DCS-CAI-SERVER - Main Orchestrator
+DARDE - Main Orchestrator
 Entry point for the deployment, watchdog daemon, system checks, and UI loop.
 """
 
@@ -55,7 +55,8 @@ def main():
     finally:
         print("[INFO] Terminating background privilege daemon...")
         sudo_manager.stop()
-        print("[OK] DCS-CAI-SERVER deployment tool closed cleanly.")
+        # FIX: Messaggio di chiusura allineato a DARDE
+        print("[OK] DARDE deployment tool closed cleanly.")
         sys.exit(exit_code)
 
 if __name__ == "__main__":

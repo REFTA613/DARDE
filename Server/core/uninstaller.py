@@ -16,7 +16,7 @@ except ImportError:
 try:
     import questionary
     from questionary import Style
-    cai_theme = Style([
+    darde_theme = Style([
         ('qmark', 'fg:#00ffff bold'),
         ('question', 'fg:#ffffff bold'),
         ('pointer', 'fg:#00ffff bold'),
@@ -24,13 +24,16 @@ try:
         ('selected', 'fg:#00ff00'),
     ])
 except ImportError:
-    cai_theme = None
+    darde_theme = None
 
 def _run(cmd, silent=False, ignore_errors=False):
     """
     Executes commands with a forced debug print to trace exact execution points.
     If ignore_errors is True, suppresses red ERROR/DETAILS blocks for expected failures.
     """
+    if isinstance(cmd, list):
+        cmd = [str(item) for item in cmd if item is not None]
+        
     cmd_str = cmd if isinstance(cmd, str) else ' '.join(cmd)
     print(f"\033[0;35m  [DEBUG] Executing: {cmd_str}\033[0m")
     
@@ -53,7 +56,7 @@ def run_uninstall_sequence():
     print("\033[0;36m       DARDE SERVER UNINSTALLER           \033[0m")
     print("\033[0;36m==========================================\033[0m\n")
 
-    if cai_theme:
+    if darde_theme:
         choice = questionary.select(
             "How do you want to proceed with the infrastructure removal?",
             choices=[
@@ -61,7 +64,7 @@ def run_uninstall_sequence():
                 "2. BULLDOZER (Total Wipe & Cache Clear)",
                 "3. CANCEL"
             ],
-            style=cai_theme
+            style=darde_theme
         ).ask()
     else:
         print("1. SOFT UNINSTALL")
@@ -73,16 +76,13 @@ def run_uninstall_sequence():
         print("\n[INFO] Operation cancelled. No changes made.")
         return
 
-    c_adguard = getattr(config, 'CONTAINER_ADGUARD', 'cai-adguard') if config else 'cai-adguard'
-    c_caddy = getattr(config, 'CONTAINER_CADDY', 'cai-caddy') if config else 'cai-caddy'
-    c_ollama = getattr(config, 'CONTAINER_OLLAMA', 'cai-ollama') if config else 'cai-ollama'
-    c_webui = getattr(config, 'CONTAINER_WEBUI', 'cai-webui') if config else 'cai-webui'
+    c_adguard = getattr(config, 'CONTAINER_ADGUARD', 'darde-adguard') if config else 'darde-adguard'
+    c_caddy = getattr(config, 'CONTAINER_CADDY', 'darde-caddy') if config else 'darde-caddy'
+    c_ollama = getattr(config, 'CONTAINER_OLLAMA', 'darde-ollama') if config else 'darde-ollama'
+    c_webui = getattr(config, 'CONTAINER_WEBUI', 'darde-webui') if config else 'darde-webui'
     
     containers = [c_adguard, c_caddy, c_ollama, c_webui]
 
-    # ==========================================
-    # OPTION 1: SOFT UNINSTALL
-    # ==========================================
     if choice.startswith("1"):
         print("\n\033[1;33m[INFO] Starting Soft Uninstall...\033[0m")
         print("[INFO] -> Removing containers...")
@@ -91,15 +91,12 @@ def run_uninstall_sequence():
             
         print("\n\033[0;32m[OK] Soft Uninstall complete. Data and volumes are safe.\033[0m\n")
 
-    # ==========================================
-    # OPTION 2: BULLDOZER
-    # ==========================================
     elif choice.startswith("2"):
-        if cai_theme:
+        if darde_theme:
             confirm = questionary.confirm(
                 "WARNING: Point of no return. All data will be wiped. Proceed?",
                 default=False,
-                style=cai_theme
+                style=darde_theme
             ).ask()
         else:
             confirm = input("Proceed? (y/n): ").lower() == 'y'
@@ -114,17 +111,20 @@ def run_uninstall_sequence():
         for c in containers:
             _run(["sudo", "podman", "rm", "-f", c], ignore_errors=True)
 
-        print("\n[INFO] -> 2/5 Force wiping Podman volumes (AI Models, Database, Config)...")
+        print("\n[INFO] -> 2/5 Force wiping Podman volumes & Local Bind Mounts...")
         volumes = [
-            getattr(config, 'VOL_ADGUARD_WORK', 'cai_adguard_work') if config else 'cai_adguard_work',
-            getattr(config, 'VOL_ADGUARD_CONF', 'cai_adguard_conf') if config else 'cai_adguard_conf',
-            getattr(config, 'VOL_CADDY_DATA', 'cai_caddy_data') if config else 'cai_caddy_data',
-            getattr(config, 'VOL_CADDY_CONF', 'cai_caddy_config') if config else 'cai_caddy_config',
-            getattr(config, 'VOL_OLLAMA', 'cai_ollama_storage') if config else 'cai_ollama_storage',
-            getattr(config, 'VOL_WEBUI', 'cai_webui_storage') if config else 'cai_webui_storage'
+            getattr(config, 'VOL_ADGUARD_WORK', 'darde_adguard_work') if config else 'darde_adguard_work',
+            getattr(config, 'VOL_ADGUARD_CONF', 'darde_adguard_conf') if config else 'darde_adguard_conf',
+            getattr(config, 'VOL_CADDY_DATA', 'darde_caddy_data') if config else 'darde_caddy_data',
+            getattr(config, 'VOL_CADDY_CONF', 'darde_caddy_config') if config else 'darde_caddy_config',
+            getattr(config, 'VOL_WEBUI', 'darde_webui_storage') if config else 'darde_webui_storage'
         ]
         for v in volumes:
             _run(["sudo", "podman", "volume", "rm", "-f", v], ignore_errors=True)
+            
+        # FIX: Eliminazione esplicita della cartella fisica di Ollama usata da DARDE
+        ollama_bind = getattr(config, 'OLLAMA_BIND_MOUNT', os.path.expanduser("~/.ollama_storage"))
+        _run(["sudo", "rm", "-rf", ollama_bind], silent=True, ignore_errors=True)
 
         print("\n[INFO] -> 3/5 Removing Cached Images (Forcing fresh download)...")
         images = [
@@ -148,16 +148,20 @@ def run_uninstall_sequence():
         _run(["sudo", "rm", "-f", "/etc/resolv.conf"], silent=True, ignore_errors=True)
         _run(["sudo", "ln", "-sf", "../run/systemd/resolve/stub-resolv.conf", "/etc/resolv.conf"], silent=True, ignore_errors=True)
         
-        ipset_name = getattr(config, 'GEOBLOCK_IPSET_NAME', 'cai_geo_block') if config else 'cai_geo_block'
+        ipset_name = getattr(config, 'GEOBLOCK_IPSET_NAME', 'darde_geo_block') if config else 'darde_geo_block'
         
         _run(["sudo", "iptables", "-t", "raw", "-D", "PREROUTING", "-m", "set", "--match-set", ipset_name, "src", "-j", "DROP"], silent=True, ignore_errors=True)
         _run(["sudo", "ipset", "destroy", ipset_name], silent=True, ignore_errors=True)
         _run(["sudo", "rm", "-f", "/etc/cron.d/darde-watchdog"], silent=True, ignore_errors=True)
         _run(["sudo", "systemctl", "reload", "cronie"], silent=True, ignore_errors=True)
 
-        print("\n[INFO] -> 5/5 Cleaning up local environment...")
+        print("\n[INFO] -> 5/5 Cleaning up local environment and Topology state...")
         home_dir = os.path.expanduser("~")
         _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/darde-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
+        
+        # FIX: Eliminazione esplicita del file topology per resettare l'intero Wizard
+        topology_file = getattr(config, 'TOPOLOGY_FILE', os.path.join(getattr(config, 'PROJECT_ROOT', os.getcwd()), 'topology.json'))
+        _run(["sudo", "rm", "-f", topology_file], silent=True, ignore_errors=True)
         
         print("\n\033[0;32m[OK] System completely wiped. Cache cleared.\033[0m")
         print("\033[0;36m[DARDE] Uninstaller finished. Terminating environment...\033[0m")
