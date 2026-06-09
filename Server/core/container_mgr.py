@@ -149,8 +149,14 @@ def deploy_adguard():
     if NODE_ROLE == "compute":
         print("[INFO] Compute Node topology selected. Skipping Security DNS.")
         return
+        
     check_grc()
     print(f"\n[INFO] Deploying Security DNS ({config.CONTAINER_ADGUARD})...")
+    
+    # Pialla i vecchi dati per forzare una configurazione pulita da zero
+    _run_podman(["rm", "-f", config.CONTAINER_ADGUARD], ignore_errors=True)
+    _run_podman(["volume", "rm", "-f", config.VOL_ADGUARD_WORK, config.VOL_ADGUARD_CONF], ignore_errors=True)
+    
     _ensure_volume(config.VOL_ADGUARD_WORK)
     _ensure_volume(config.VOL_ADGUARD_CONF)
 
@@ -163,7 +169,8 @@ def deploy_adguard():
         "docker.io/adguard/adguardhome"
     ])
     
-    time.sleep(3)
+    wait_for_service_startup(3000)
+    time.sleep(2) 
     print("[INFO] Applying default AdGuard interface configuration...")
     
     curl_cmd = [
