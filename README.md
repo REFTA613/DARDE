@@ -35,3 +35,11 @@ The heavy-lifting AI worker.
 
 ## Getting Started
 To initialize the DARDE infrastructure, run the `main.py` entry point on your Linux server. The built-in Setup Wizard will guide you through selecting the node's topology, configuring the dynamic domain names, and deploying the appropriate container stack.
+
+## Architectural Topology
+
+The DARDE infrastructure is designed to be highly flexible and resilient, supporting both single-node deployments and distributed multi-node clusters.
+
+![DARDE System Topology](docs/images/DARDE_Topology.jpeg)
+
+*Figure 1: DARDE System Topology and Network Security Architecture.*
