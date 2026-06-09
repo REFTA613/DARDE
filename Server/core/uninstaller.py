@@ -135,13 +135,16 @@ def run_uninstall_sequence():
 
         print("\n[INFO] -> 3/5 Removing Cached Images (Forcing fresh download)...")
         images = [
-            "docker.io/adguard/adguardhome:latest",
-            "docker.io/library/caddy:latest",
-            "docker.io/ollama/ollama:latest",
+            "docker.io/adguard/adguardhome",
+            "docker.io/library/caddy",
+            "docker.io/ollama/ollama",
             "ghcr.io/open-webui/open-webui:main"
         ]
         for img in images:
             _run(["sudo", "podman", "rmi", "-f", img], ignore_errors=True)
+            
+        # Add a prune command to aggressively clear dangling layers left behind
+        _run(["sudo", "podman", "image", "prune", "-f"], ignore_errors=True)
 
         print("\n[INFO] -> 4/5 Restoring native Host DNS routing and Network...")
         caddy_dir = getattr(config, 'CADDY_DIR', '/etc/caddy') if config else '/etc/caddy'

@@ -186,17 +186,23 @@ def deploy_caddy():
 
     print(f"[INFO] Writing dynamic routing rules for: {domain_dsp}, {domain_ai}, {domain_api}")
     
+    # File: DCS-CAI-SERVER/core/container_mgr.py
+# (Find caddyfile_content and replace it entirely)
+
     caddyfile_content = (
         f"{domain_dsp} {{\n"
         f"        tls internal\n"
+        f"        log\n"
         f"        reverse_proxy 127.0.0.1:3000\n"
         f"}}\n"
         f"{domain_ai} {{\n"
         f"        tls internal\n"
+        f"        log\n"
         f"        reverse_proxy 127.0.0.1:8080\n"
         f"}}\n"
         f"{domain_api} {{\n"
         f"        tls internal\n"
+        f"        log\n"
         f"        reverse_proxy 127.0.0.1:11434 {{\n"
         f"                header_up Host \"localhost\"\n"
         f"                header_up Origin \"http://localhost\"\n"
