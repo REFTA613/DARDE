@@ -184,9 +184,11 @@ def deploy_adguard():
     _run_podman(["restart", config.CONTAINER_ADGUARD], ignore_errors=True)
     print(f"[OK] {config.CONTAINER_ADGUARD} deployed successfully.")
 
+
 def deploy_caddy():
     """Deploys Caddy proxy and builds routing configs matching active config.py domains."""
-    if NODE_ROLE == "compute":
+    import json # Importazione aggiunta per il json dump
+    if config.NODE_ROLE == "compute":
         print(f"[INFO] Compute Node topology: Deploying Micro-Proxy on port {config.COMPUTE_API_PORT}...")
         _deploy_compute_proxy()
         return
@@ -250,42 +252,38 @@ def deploy_caddy():
 
     if cert_ready:
         home_dir = os.path.expanduser("~")
-        hostname = socket.gethostname()
-        if hostname in ("localhost", "localhost.localdomain", ""):
-            hostname = "server"
-            
-        cert_filename = f"DARDE-{hostname}-root.crt"
+        current_user_proc = subprocess.run(["whoami"], capture_output=True, text=True)
+        current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
+        
+        # --- EXPORT ROOT CERTIFICATE (NOME FISSO) ---
+        cert_filename = "darde-root.crt"
         dest_cert = os.path.join(home_dir, cert_filename)
         
         subprocess.run(["sudo", "podman", "cp", f"{config.CONTAINER_CADDY}:{ca_internal_path}", dest_cert], stdout=subprocess.DEVNULL)
-        
-        current_user_proc = subprocess.run(["whoami"], capture_output=True, text=True)
-        current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
         subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", dest_cert], stdout=subprocess.DEVNULL)
-        
         print(f"[OK] Root Certificate secured at ~/{cert_filename}")
-    else:
-        print("[WARN] Could not locate Caddy root.crt inside the container.")
-    
-    configure_ufw()
-    print(f"[OK] Root Certificate secured at ~/{cert_filename}")
         
         # --- EXPORT CLIENT CONFIGURATION (JSON) ---
-        
-    client_json_path = os.path.join(home_dir, "darde_client_profile.json")
-    profile_data = {
+        client_json_path = os.path.join(home_dir, "darde_client_profile.json")
+        profile_data = {
             "base_domain": config.DOMAIN_SUFFIX,
             "ai_domain": config.DOMAIN_AI,
             "api_domain": config.DOMAIN_API,
             "dsp_domain": config.DOMAIN_DSP
         }
-    with open("temp_profile.json", "w") as f:
+        with open("temp_profile.json", "w") as f:
             json.dump(profile_data, f, indent=4)
+            
+        subprocess.run(["sudo", "mv", "temp_profile.json", client_json_path], stdout=subprocess.DEVNULL)
+        subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", client_json_path], stdout=subprocess.DEVNULL)
+        print(f"[OK] Client Profile JSON exported to ~/{os.path.basename(client_json_path)}")
         
-    subprocess.run(["sudo", "mv", "temp_profile.json", client_json_path], stdout=subprocess.DEVNULL)
-    subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", client_json_path], stdout=subprocess.DEVNULL)
-    print(f"[OK] Client Profile JSON exported to ~/{os.path.basename(client_json_path)}")
-        # ------------------------------------------
+    else:
+        print("[WARN] Could not locate Caddy root.crt inside the container.")
+    
+    configure_ufw()
+
+# ------------------------------------------
 
 def _deploy_compute_proxy():
     """Deploys a lightweight internal TLS proxy to secure the Ollama API."""

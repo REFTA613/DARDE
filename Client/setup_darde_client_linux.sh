@@ -42,8 +42,9 @@ prompt_credentials() {
 fetch_server_profile() {
     echo -e "\n${CYAN}[1/4] Connecting to Server to fetch Profile and Certificate...${NC}"
     
-    su - "$REAL_USER" -c "scp ${GLOBAL_SERVER_USER}@${GLOBAL_SERVER_IP}:~/darde_client_profile.json $TEMP_JSON_PATH" >/dev/null 2>&1
-    su - "$REAL_USER" -c "scp ${GLOBAL_SERVER_USER}@${GLOBAL_SERVER_IP}:~/DARDE-\*-root.crt $TEMP_CERT_PATH" >/dev/null 2>&1
+    # Doppio scp protetto solo dalle virgolette, senza backslash per l'asterisco
+    scp -o StrictHostKeyChecking=accept-new "${GLOBAL_SERVER_USER}@${GLOBAL_SERVER_IP}:~/darde_client_profile.json" "$TEMP_JSON_PATH"
+    scp -o StrictHostKeyChecking=accept-new "${GLOBAL_SERVER_USER}@${GLOBAL_SERVER_IP}:~/darde-root.crt" "$TEMP_CERT_PATH"
 
     if [ ! -f "$TEMP_CERT_PATH" ] || [ ! -f "$TEMP_JSON_PATH" ]; then
         echo -e "${RED}[ERROR] Failed to download files. Ensure you have run Option 1 on the Server first.${NC}"
