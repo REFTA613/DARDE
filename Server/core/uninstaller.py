@@ -85,7 +85,7 @@ def run_uninstall_sequence():
     c_webui = getattr(config, 'CONTAINER_WEBUI', 'cai-webui') if config else 'cai-webui'
     c_temp = getattr(config, 'CONTAINER_TEMP_OLLAMA', 'cai-ollama-temp') if config else 'cai-ollama-temp'
     
-    containers = [c_adguard, c_caddy, c_ollama, c_webui, c_temp]
+    
 
     # ==========================================
     # OPTION 1: SOFT UNINSTALL

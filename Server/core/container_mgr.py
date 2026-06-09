@@ -1,14 +1,13 @@
 """
-DARDE - Container Manager Module
+DCS-CAI-SERVER - Container Manager Module
 Handles Podman volumes, images, container lifecycle, and dynamic Caddy routing.
 """
-from config import NODE_ROLE
+
 import subprocess
 import time
 import os
 import config
 import socket
-import json
 from ai.model_mgr import select_initial_model
 
 def check_grc():
@@ -147,17 +146,8 @@ def _ensure_volume(volume_name):
 
 def deploy_adguard():
     """Deploys the AdGuard Home container and applies the initial JSON configuration."""
-    if NODE_ROLE == "compute":
-        print("[INFO] Compute Node topology selected. Skipping Security DNS.")
-        return
-        
     check_grc()
     print(f"\n[INFO] Deploying Security DNS ({config.CONTAINER_ADGUARD})...")
-    
-    # Pialla i vecchi dati per forzare una configurazione pulita da zero
-    _run_podman(["rm", "-f", config.CONTAINER_ADGUARD], ignore_errors=True)
-    _run_podman(["volume", "rm", "-f", config.VOL_ADGUARD_WORK, config.VOL_ADGUARD_CONF], ignore_errors=True)
-    
     _ensure_volume(config.VOL_ADGUARD_WORK)
     _ensure_volume(config.VOL_ADGUARD_CONF)
 
@@ -170,34 +160,26 @@ def deploy_adguard():
         "docker.io/adguard/adguardhome"
     ])
     
-    wait_for_service_startup(3000)
-    time.sleep(2) 
+    time.sleep(3)
     print("[INFO] Applying default AdGuard interface configuration...")
     
     curl_cmd = [
         "sudo", "curl", "-s", "-X", "POST", "http://127.0.0.1:3000/control/install/configure",
         "-H", "Content-Type: application/json",
-        "-d", '{"web": {"ip": "0.0.0.0", "port": 3000, "status": ""}, "dns": {"ip": "0.0.0.0", "port": 53, "status": ""}, "password": "admin123", "name": "admin"}'
+        "-d", '{"web": {"ip": "0.0.0.0", "port": 3000, "status": ""}, "dns": {"ip": "0.0.0.0", "port": 53, "status": ""}, "password": "admin", "name": "admin"}'
     ]
     subprocess.run(curl_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
     _run_podman(["restart", config.CONTAINER_ADGUARD], ignore_errors=True)
     print(f"[OK] {config.CONTAINER_ADGUARD} deployed successfully.")
 
-
 def deploy_caddy():
     """Deploys Caddy proxy and builds routing configs matching active config.py domains."""
-    import json # Importazione aggiunta per il json dump
-    if config.NODE_ROLE == "compute":
-        print(f"[INFO] Compute Node topology: Deploying Micro-Proxy on port {config.COMPUTE_API_PORT}...")
-        _deploy_compute_proxy()
-        return
-        
     print(f"\n[INFO] Deploying Reverse Proxy ({config.CONTAINER_CADDY})...")
     _ensure_volume(config.VOL_CADDY_DATA)
     _ensure_volume(config.VOL_CADDY_CONF)
 
-    # Estrazione dinamica dei domini reali dal file config
+    # Dynamic extraction of domains from config
     domain_dsp = getattr(config, 'DOMAIN_DSP', 'dspserver.dcscai.lan')
     domain_ai = getattr(config, 'DOMAIN_AI', 'ai.dcscai.lan')
     domain_api = getattr(config, 'DOMAIN_API', 'api.dcscai.lan')
@@ -252,142 +234,100 @@ def deploy_caddy():
 
     if cert_ready:
         home_dir = os.path.expanduser("~")
-        current_user_proc = subprocess.run(["whoami"], capture_output=True, text=True)
-        current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
-        
-        # --- EXPORT ROOT CERTIFICATE (NOME FISSO) ---
-        cert_filename = "darde-root.crt"
+        hostname = socket.gethostname()
+        if hostname in ("localhost", "localhost.localdomain", ""):
+            hostname = "server"
+            
+        cert_filename = f"DCS-CAI-SERVER-{hostname}-root.crt"
         dest_cert = os.path.join(home_dir, cert_filename)
         
         subprocess.run(["sudo", "podman", "cp", f"{config.CONTAINER_CADDY}:{ca_internal_path}", dest_cert], stdout=subprocess.DEVNULL)
+        
+        current_user_proc = subprocess.run(["whoami"], capture_output=True, text=True)
+        current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
         subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", dest_cert], stdout=subprocess.DEVNULL)
-        print(f"[OK] Root Certificate secured at ~/{cert_filename}")
         
-        # --- EXPORT CLIENT CONFIGURATION (JSON) ---
-        client_json_path = os.path.join(home_dir, "darde_client_profile.json")
-        profile_data = {
-            "base_domain": config.DOMAIN_SUFFIX,
-            "ai_domain": config.DOMAIN_AI,
-            "api_domain": config.DOMAIN_API,
-            "dsp_domain": config.DOMAIN_DSP
-        }
-        with open("temp_profile.json", "w") as f:
-            json.dump(profile_data, f, indent=4)
-            
-        subprocess.run(["sudo", "mv", "temp_profile.json", client_json_path], stdout=subprocess.DEVNULL)
-        subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", client_json_path], stdout=subprocess.DEVNULL)
-        print(f"[OK] Client Profile JSON exported to ~/{os.path.basename(client_json_path)}")
-        
+        # UI prompt to instruct the user about the HTTPS local certificate setup
+        print("\n\033[1;33m" + "="*70)
+        print(" ACTION REQUIRED: HTTPS CERTIFICATE GENERATED")
+        print("="*70)
+        print(f" Your local Root CA has been saved to: \033[1;36m{dest_cert}\033[1;33m")
+        print(" To remove the 'Not Secure' warning in your web browser, you MUST:")
+        print(" 1. Copy this .crt file to your Client device (Windows/Mac/iOS/Android).")
+        print(" 2. Install it in the OS 'Trusted Root Certification Authorities' store.")
+        print(" 3. Restart your web browser.")
+        print("="*70 + "\033[0m\n")
     else:
         print("[WARN] Could not locate Caddy root.crt inside the container.")
     
     configure_ufw()
 
-# ------------------------------------------
-
-def _deploy_compute_proxy():
-    """Deploys a lightweight internal TLS proxy to secure the Ollama API."""
-    _run_podman(["rm", "-f", config.CONTAINER_MICRO_PROXY], ignore_errors=True)
-    
-    caddy_dir = "/etc/darde_micro_proxy"
-    os.makedirs(caddy_dir, exist_ok=True)
-    caddyfile_path = os.path.join(caddy_dir, "Caddyfile")
-    
-    # Generates an internal HTTPS proxy, restricting access to Private LAN IPs only
-    with open(caddyfile_path, "w") as f:
-        f.write(f"""
-:{config.COMPUTE_API_PORT} {{
-    tls internal
-    @lan remote_ip 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12 127.0.0.1
-    handle @lan {{
-        reverse_proxy 127.0.0.1:11434
-    }}
-    respond "Access Denied - DARDE Zero Trust" 403
-}}
-""")
-    
-    _run_podman([
-        "run", "-d", "--restart=always", "--name", config.CONTAINER_MICRO_PROXY,
-        "--net=host",
-        "-v", f"{caddyfile_path}:/etc/caddy/Caddyfile:z",
-        "docker.io/caddy:latest"
-    ])
-    print(f"[OK] Micro-Proxy is now shielding Ollama via HTTPS on port {config.COMPUTE_API_PORT}.")
-
-def deploy_ai_stack(ram_limit_gb=8):
-    """Deploys the Ollama backend and/or Open-WebUI frontend based on topology."""
+def deploy_ai_stack(ram_limit_gb=4):
+    """Deploys the Ollama backend and Open-WebUI frontend."""
     check_grc()
-    print(f"\n[INFO] Deploying Level 2 AI Stack (Mode: {NODE_ROLE.upper()})...")
+    print("\n[INFO] Deploying Level 2 AI Stack...")
     
-    _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA, config.CONTAINER_TEMP_OLLAMA], ignore_errors=True)
+    _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA], ignore_errors=True)
     
-    # --- OLLAMA BACKEND (Standalone & Compute) ---
-    if NODE_ROLE in ["standalone", "compute"]:
-        os.makedirs(config.OLLAMA_BIND_MOUNT, exist_ok=True)
-        print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
-        _run_podman([
-            "run", "-d", "--restart=always", "--name", config.CONTAINER_OLLAMA,
-            "--net=host",
-            "-e", "OLLAMA_HOST=127.0.0.1:11434",
-            "-e", "OLLAMA_KEEP_ALIVE=15m",
-            "-v", f"{config.OLLAMA_BIND_MOUNT}:/root/.ollama:z",
-            f"--memory={ram_limit_gb}g",
-            f"--memory-swap={ram_limit_gb}g",
-            "docker.io/ollama/ollama"
-        ])
+    _ensure_volume(config.VOL_OLLAMA)
+    _ensure_volume(config.VOL_WEBUI)
 
-    # --- WEBUI FRONTEND (Standalone & Gateway) ---
-    if NODE_ROLE in ["standalone", "gateway"]:
-        _ensure_volume(config.VOL_WEBUI)
-        
-        # Determine target AI Backend
-        ollama_url = "http://127.0.0.1:11434"
-        if NODE_ROLE == "gateway":
-            ollama_url = f"https://{config.COMPUTE_NODE_IP}:{config.COMPUTE_API_PORT}"
-            print(f"[INFO] Routing AI traffic to Compute Node at {ollama_url}...")
-            
-        print(f"[INFO] Starting AI Frontend ({config.CONTAINER_WEBUI})...")
-        _run_podman([
-            "run", "-d", "--restart=always", "--name", config.CONTAINER_WEBUI,
-            "--net=host",
-            "-e", "HOST=127.0.0.1",
-            "-e", "PORT=8080",
-            "-e", f"OLLAMA_BASE_URL={ollama_url}",
-            "-e", "FILE_UPLOAD_SIZE_LIMIT=5000",
-            "-e", "ENABLE_RAG=False",
-            "-v", f"{config.VOL_WEBUI}:/app/backend/data",
-            "--memory=2g",
-            "ghcr.io/open-webui/open-webui:main"
-        ])
-        wait_for_service_startup(8080)
+    print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
+    _run_podman([
+        "run", "-d", "--restart=always", "--name", config.CONTAINER_OLLAMA,
+        "--net=host",
+        "-e", "OLLAMA_HOST=127.0.0.1:11434",
+        "-e", "OLLAMA_KEEP_ALIVE=15m",
+        "-v", f"{config.VOL_OLLAMA}:/root/.ollama",
+        f"--memory={ram_limit_gb}g",
+        f"--memory-swap={ram_limit_gb}g",
+        "docker.io/ollama/ollama"
+    ])
+
+    print(f"[INFO] Starting AI Frontend ({config.CONTAINER_WEBUI})...")
+    _run_podman([
+        "run", "-d", "--restart=always", "--name", config.CONTAINER_WEBUI,
+        "--net=host",
+        "-e", "HOST=127.0.0.1",
+        "-e", "PORT=8080",
+        "-e", "OLLAMA_BASE_URL=http://127.0.0.1:11434",
+        "-e", "FILE_UPLOAD_SIZE_LIMIT=5000",
+        "-e", "ENABLE_RAG=False",
+        "-v", f"{config.VOL_WEBUI}:/app/backend/data",
+        "--memory=2g",
+        "ghcr.io/open-webui/open-webui:main"
+    ])
+    
+    wait_for_service_startup(8080)
+    
+    # Wait for the Ollama backend to become responsive before sending the pull command
+    wait_for_service_startup(11434)
     
     configure_ufw()
     
-    if NODE_ROLE in ["standalone", "gateway"]:
-        print("[INFO] Reloading proxy routing rules...")
-        _run_podman(["exec", config.CONTAINER_CADDY, "caddy", "reload", "--config", "/etc/caddy/Caddyfile"], ignore_errors=True)
+    print("[INFO] Reloading proxy routing rules...")
+    _run_podman(["exec", config.CONTAINER_CADDY, "caddy", "reload", "--config", "/etc/caddy/Caddyfile"], ignore_errors=True)
+    print("[OK] Level 2 AI Stack successfully deployed.")
+
+    print("\n[INFO] Initializing AI Model Configuration...")
+    selected_model = select_initial_model()
+
+    if selected_model and selected_model != "skip":
+        print(f"\n[INFO] Pulling '{selected_model}' into Ollama. This will take several minutes...")
         
-    if NODE_ROLE in ["standalone", "compute"]:
-        print("\n[INFO] Initializing AI Model Configuration...")
-        selected_model = select_initial_model()
-        if selected_model and selected_model != "skip":
-            print(f"\n[INFO] Pulling '{selected_model}' into Ollama. This will take several minutes...")
-            _run_podman(["exec", config.CONTAINER_OLLAMA, "ollama", "pull", selected_model])
-            print(f"\n[OK] Model '{selected_model}' is successfully installed and ready to use!")
+        # Added -t to force TTY allocation for rendering the Ollama progress bar
+        _run_podman(["exec", "-t", config.CONTAINER_OLLAMA, "ollama", "pull", selected_model])
+        
+        print(f"\n[OK] Model '{selected_model}' is successfully installed and ready to use!")
 
-    print("\n[OK] AI Stack deployment sequence completed.")
-
-    
 def stop_all_containers():
     """Executes a hard stop on active project containers to flush RAM."""
     print("\n[INFO] Sending SIGTERM to all infrastructure containers...")
     targets = [
-        config.CONTAINER_CADDY,
-        config.CONTAINER_ADGUARD,
-        config.CONTAINER_WEBUI,
-        config.CONTAINER_OLLAMA,
-        config.CONTAINER_TEMP_OLLAMA,
-        config.CONTAINER_MICRO_PROXY   
+        config.CONTAINER_CADDY, 
+        config.CONTAINER_ADGUARD, 
+        config.CONTAINER_OLLAMA, 
+        config.CONTAINER_WEBUI
     ]
     for target in targets:
         _run_podman(["stop", target], ignore_errors=True)

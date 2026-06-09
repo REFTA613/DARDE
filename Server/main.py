@@ -9,14 +9,26 @@ from core.auth import sudo_manager
 from core.system_checks import run_all_checks
 from ui.terminal_menu import show_main_menu
 
+# FIX: Import the missing modules for headless cron execution
+from core.watchdog import run_diagnostics
+from network.geoblock import update_geoblock_zones
+
 def handle_headless_mode(args):
     """
     Intercepts command-line arguments for automated headless tasks (e.g., cron jobs).
     """
     if "--watchdog" in args:
         print("[INFO] Headless Watchdog Mode triggered.")
-        # TODO: Route to core.watchdog module
+        # FIX: Replaced the 'TODO' with the actual execution function
+        run_diagnostics()
         print("[OK] Watchdog sequence completed. Exiting.")
+        sys.exit(0)
+
+    # FIX: Added the missing listener for the nightly Geo-Block updates
+    if "--update-geoblock" in args:
+        print("[INFO] Headless Geo-Block Update triggered.")
+        update_geoblock_zones(headless=True)
+        print("[OK] Geo-Block sequence completed. Exiting.")
         sys.exit(0)
 
 def main():
