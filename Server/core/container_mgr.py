@@ -298,7 +298,6 @@ def deploy_ai_stack(ram_limit_gb=8):
     _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA, config.CONTAINER_TEMP_OLLAMA], ignore_errors=True)
     
     # --- OLLAMA BACKEND (Standalone & Compute) ---
-    # --- OLLAMA BACKEND (Standalone & Compute) ---
     if NODE_ROLE in ["standalone", "compute"]:
         os.makedirs(config.OLLAMA_BIND_MOUNT, exist_ok=True)
         print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
@@ -312,7 +311,6 @@ def deploy_ai_stack(ram_limit_gb=8):
             f"--memory-swap={ram_limit_gb}g",
             "docker.io/ollama/ollama"
         ])
-
 
     # --- WEBUI FRONTEND (Standalone & Gateway) ---
     if NODE_ROLE in ["standalone", "gateway"]:
@@ -354,56 +352,8 @@ def deploy_ai_stack(ram_limit_gb=8):
             print(f"\n[OK] Model '{selected_model}' is successfully installed and ready to use!")
 
     print("\n[OK] AI Stack deployment sequence completed.")
-    """Deploys the Ollama backend and Open-WebUI frontend."""
-    check_grc()
-    print("\n[INFO] Deploying Level 2 AI Stack...")
+
     
-    _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA, config.CONTAINER_TEMP_OLLAMA], ignore_errors=True)
-    
-    _ensure_volume(config.VOL_OLLAMA)
-    _ensure_volume(config.VOL_WEBUI)
-
-    print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
-    _run_podman([
-        "run", "-d", "--restart=always", "--name", config.CONTAINER_OLLAMA,
-        "--net=host",
-        "-e", "OLLAMA_HOST=127.0.0.1:11434",
-        "-e", "OLLAMA_KEEP_ALIVE=15m",
-        "-v", f"{config.VOL_OLLAMA}:/root/.ollama",
-        f"--memory={ram_limit_gb}g",
-        f"--memory-swap={ram_limit_gb}g",
-        "docker.io/ollama/ollama"
-    ])
-
-    print(f"[INFO] Starting AI Frontend ({config.CONTAINER_WEBUI})...")
-    _run_podman([
-        "run", "-d", "--restart=always", "--name", config.CONTAINER_WEBUI,
-        "--net=host",
-        "-e", "HOST=127.0.0.1",
-        "-e", "PORT=8080",
-        "-e", "OLLAMA_BASE_URL=http://127.0.0.1:11434",
-        "-e", "FILE_UPLOAD_SIZE_LIMIT=5000",
-        "-e", "ENABLE_RAG=False",
-        "-v", f"{config.VOL_WEBUI}:/app/backend/data",
-        "--memory=2g",
-        "ghcr.io/open-webui/open-webui:main"
-    ])
-    
-    wait_for_service_startup(8080)
-    configure_ufw()
-    
-    print("[INFO] Reloading proxy routing rules...")
-    _run_podman(["exec", config.CONTAINER_CADDY, "caddy", "reload", "--config", "/etc/caddy/Caddyfile"], ignore_errors=True)
-    print("[OK] Level 2 AI Stack successfully deployed.")
-
-    print("\n[INFO] Initializing AI Model Configuration...")
-    selected_model = select_initial_model()
-
-    if selected_model and selected_model != "skip":
-        print(f"\n[INFO] Pulling '{selected_model}' into Ollama. This will take several minutes...")
-        _run_podman(["exec", config.CONTAINER_OLLAMA, "ollama", "pull", selected_model])
-        print(f"\n[OK] Model '{selected_model}' is successfully installed and ready to use!")
-
 def stop_all_containers():
     """Executes a hard stop on active project containers to flush RAM."""
     print("\n[INFO] Sending SIGTERM to all infrastructure containers...")
