@@ -142,7 +142,7 @@ function Create-Dashboard {
 function Install-Client {
     Prompt-Credentials
     Write-Host "`n[1/5] SSH connection for the certificate (Server Password Request)..." -ForegroundColor Cyan
-    scp "${Global:ServerUser}@${Global:ServerIP}:~/DARDE-*-root.crt" $TempCertPath
+    scp "${Global:ServerUser}@${Global:ServerIP}:~/darde-root.crt" $TempCertPath
     
     if (-not (Test-Path $TempCertPath)) {
         Write-Host "[ERROR] Failed to download certificate. Check password or network." -ForegroundColor Red
@@ -267,7 +267,7 @@ function Diagnose-And-Heal {
         Write-Host "[FAILED] Certificate not found." -ForegroundColor Red
         Write-Host "  -> [FIX] Trying to download and install automatically..." -ForegroundColor Yellow
         Prompt-Credentials
-        scp "${Global:ServerUser}@${Global:ServerIP}:~/DARDE-*-root.crt" $TempCertPath
+        scp "${Global:ServerUser}@${Global:ServerIP}:~/darde-root.crt" $TempCertPath
         if (Test-Path $TempCertPath) {
             certutil.exe -addstore -f "Root" $TempCertPath | Out-Null
             Remove-Item -Path $TempCertPath -Force

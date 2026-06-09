@@ -1,5 +1,5 @@
 """
-DCS-CAI-SERVER - System Uninstaller Module
+DARDE - System Uninstaller Module
 Executes Soft and Bulldozer uninstall sequences with explicit debug logging.
 """
 
@@ -50,7 +50,7 @@ def _run(cmd, silent=False, ignore_errors=False):
 
 def run_uninstall_sequence():
     print("\n\033[0;36m==========================================\033[0m")
-    print("\033[0;36m       DCS-CAI SERVER UNINSTALLER         \033[0m")
+    print("\033[0;36m       DARDE SERVER UNINSTALLER           \033[0m")
     print("\033[0;36m==========================================\033[0m\n")
 
     if cai_theme:
@@ -152,15 +152,15 @@ def run_uninstall_sequence():
         
         _run(["sudo", "iptables", "-t", "raw", "-D", "PREROUTING", "-m", "set", "--match-set", ipset_name, "src", "-j", "DROP"], silent=True, ignore_errors=True)
         _run(["sudo", "ipset", "destroy", ipset_name], silent=True, ignore_errors=True)
-        _run(["sudo", "rm", "-f", "/etc/cron.d/dcs-cai-watchdog"], silent=True, ignore_errors=True)
+        _run(["sudo", "rm", "-f", "/etc/cron.d/darde-watchdog"], silent=True, ignore_errors=True)
         _run(["sudo", "systemctl", "reload", "cronie"], silent=True, ignore_errors=True)
 
         print("\n[INFO] -> 5/5 Cleaning up local environment...")
         home_dir = os.path.expanduser("~")
-        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/DCS-CAI-SERVER-*-root.crt", silent=True, ignore_errors=True)
+        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/darde-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
         
         print("\n\033[0;32m[OK] System completely wiped. Cache cleared.\033[0m")
-        print("\033[0;36m[DCS-CAI-SERVER] Uninstaller finished. Terminating environment...\033[0m")
+        print("\033[0;36m[DARDE] Uninstaller finished. Terminating environment...\033[0m")
         
         time.sleep(1)
         _run("sudo rm -rf .venv __pycache__", silent=True, ignore_errors=True)

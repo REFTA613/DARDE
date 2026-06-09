@@ -150,6 +150,8 @@ def show_main_menu():
         except KeyboardInterrupt:
             break
 
+# Aggiungi 'import json' all'inizio del file terminal_menu.py se non c'è
+
 def prompt_topology():
     print("\n\033[0;36m==========================================\033[0m")
     print("\033[1;36m  DARDE - TOPOLOGY INITIALIZATION WIZARD  \033[0m")
@@ -189,6 +191,19 @@ def prompt_topology():
         ).ask().strip()
 
     save_topology(selected_role, node_name, machine_name, compute_ip)
-    print(f"\n\033[1;32m[OK] Topology saved! Base domain: {node_name}.{machine_name}.local\033[0m\n")
+    
+    # FIX: Generazione automatica del profilo per i Client (Smart Discovery)
+    import json
+    base_domain = f"{node_name}.{machine_name}.local"
+    profile_data = {"base_domain": base_domain, "role": selected_role}
+    home_dir = os.path.expanduser("~")
+    profile_path = os.path.join(home_dir, "darde_client_profile.json")
+    try:
+        with open(profile_path, "w") as f:
+            json.dump(profile_data, f)
+    except Exception:
+        pass # Fallback silenzioso se l'OS blocca la scrittura
+
+    print(f"\n\033[1;32m[OK] Topology saved! Base domain: {base_domain}\033[0m\n")
     return selected_role
 

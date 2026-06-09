@@ -9,3 +9,4 @@ venv/
 # Local certificates
 *.crt
 *.key
+Server/topology.json
