@@ -1,5 +1,5 @@
 """
-DARDE - System Uninstaller Module
+DCS-CAI-SERVER - System Uninstaller Module
 Executes Soft and Bulldozer uninstall sequences with explicit debug logging.
 """
 
@@ -7,7 +7,6 @@ import subprocess
 import sys
 import time
 import os
-import importlib
 
 try:
     import config
@@ -15,20 +14,16 @@ except ImportError:
     config = None
 
 try:
-    questionary = importlib.import_module('questionary')
-    Style = getattr(questionary, 'Style', None)
-    if Style:
-        cai_theme = Style([
-            ('qmark', 'fg:#00ffff bold'),
-            ('question', 'fg:#ffffff bold'),
-            ('pointer', 'fg:#00ffff bold'),
-            ('highlighted', 'fg:#00ffff bold'),
-            ('selected', 'fg:#00ff00'),
-        ])
-    else:
-        cai_theme = None
+    import questionary
+    from questionary import Style
+    cai_theme = Style([
+        ('qmark', 'fg:#00ffff bold'),
+        ('question', 'fg:#ffffff bold'),
+        ('pointer', 'fg:#00ffff bold'),
+        ('highlighted', 'fg:#00ffff bold'),
+        ('selected', 'fg:#00ff00'),
+    ])
 except ImportError:
-    questionary = None
     cai_theme = None
 
 def _run(cmd, silent=False, ignore_errors=False):
@@ -37,7 +32,6 @@ def _run(cmd, silent=False, ignore_errors=False):
     If ignore_errors is True, suppresses red ERROR/DETAILS blocks for expected failures.
     """
     cmd_str = cmd if isinstance(cmd, str) else ' '.join(cmd)
-    
     print(f"\033[0;35m  [DEBUG] Executing: {cmd_str}\033[0m")
     
     try:
@@ -83,9 +77,8 @@ def run_uninstall_sequence():
     c_caddy = getattr(config, 'CONTAINER_CADDY', 'cai-caddy') if config else 'cai-caddy'
     c_ollama = getattr(config, 'CONTAINER_OLLAMA', 'cai-ollama') if config else 'cai-ollama'
     c_webui = getattr(config, 'CONTAINER_WEBUI', 'cai-webui') if config else 'cai-webui'
-    c_temp = getattr(config, 'CONTAINER_TEMP_OLLAMA', 'cai-ollama-temp') if config else 'cai-ollama-temp'
     
-    
+    containers = [c_adguard, c_caddy, c_ollama, c_webui]
 
     # ==========================================
     # OPTION 1: SOFT UNINSTALL
@@ -142,8 +135,7 @@ def run_uninstall_sequence():
         ]
         for img in images:
             _run(["sudo", "podman", "rmi", "-f", img], ignore_errors=True)
-            
-        # Add a prune command to aggressively clear dangling layers left behind
+
         _run(["sudo", "podman", "image", "prune", "-f"], ignore_errors=True)
 
         print("\n[INFO] -> 4/5 Restoring native Host DNS routing and Network...")
@@ -165,11 +157,10 @@ def run_uninstall_sequence():
 
         print("\n[INFO] -> 5/5 Cleaning up local environment...")
         home_dir = os.path.expanduser("~")
-        # Updated to remove the new fixed certificate, legacy certificates, and the JSON client profile
-        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/DARDE-*-root.crt {home_dir}/darde-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
+        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/DCS-CAI-SERVER-*-root.crt", silent=True, ignore_errors=True)
         
         print("\n\033[0;32m[OK] System completely wiped. Cache cleared.\033[0m")
-        print("\033[0;36m[DARDE] Uninstaller finished. Terminating environment...\033[0m")
+        print("\033[0;36m[DCS-CAI-SERVER] Uninstaller finished. Terminating environment...\033[0m")
         
         time.sleep(1)
         _run("sudo rm -rf .venv __pycache__", silent=True, ignore_errors=True)
