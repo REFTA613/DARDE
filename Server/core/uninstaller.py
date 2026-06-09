@@ -157,7 +157,8 @@ def run_uninstall_sequence():
 
         print("\n[INFO] -> 5/5 Cleaning up local environment...")
         home_dir = os.path.expanduser("~")
-        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/DARDE-*-root.crt", silent=True, ignore_errors=True)
+        # Updated to remove the new fixed certificate, legacy certificates, and the JSON client profile
+        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/DARDE-*-root.crt {home_dir}/darde-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
         
         print("\n\033[0;32m[OK] System completely wiped. Cache cleared.\033[0m")
         print("\033[0;36m[DARDE] Uninstaller finished. Terminating environment...\033[0m")
