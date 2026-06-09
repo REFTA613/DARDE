@@ -298,21 +298,22 @@ def deploy_ai_stack(ram_limit_gb=8):
     _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA, config.CONTAINER_TEMP_OLLAMA], ignore_errors=True)
     
     # --- OLLAMA BACKEND (Standalone & Compute) ---
+    # --- OLLAMA BACKEND (Standalone & Compute) ---
     if NODE_ROLE in ["standalone", "compute"]:
-        _ensure_volume(config.VOL_OLLAMA)
+        os.makedirs(config.OLLAMA_BIND_MOUNT, exist_ok=True)
         print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
         _run_podman([
             "run", "-d", "--restart=always", "--name", config.CONTAINER_OLLAMA,
             "--net=host",
             "-e", "OLLAMA_HOST=127.0.0.1:11434",
             "-e", "OLLAMA_KEEP_ALIVE=15m",
-            "-v", f"{config.VOL_OLLAMA}:/root/.ollama",
+            "-v", f"{config.OLLAMA_BIND_MOUNT}:/root/.ollama:z",
             f"--memory={ram_limit_gb}g",
             f"--memory-swap={ram_limit_gb}g",
             "docker.io/ollama/ollama"
         ])
 
-    # --- WEBUI FRONTEND (Standalone & Gateway) ---
+
     # --- WEBUI FRONTEND (Standalone & Gateway) ---
     if NODE_ROLE in ["standalone", "gateway"]:
         _ensure_volume(config.VOL_WEBUI)
