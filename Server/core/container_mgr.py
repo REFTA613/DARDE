@@ -176,7 +176,7 @@ def deploy_adguard():
     curl_cmd = [
         "sudo", "curl", "-s", "-X", "POST", "http://127.0.0.1:3000/control/install/configure",
         "-H", "Content-Type: application/json",
-        "-d", '{"web": {"ip": "0.0.0.0", "port": 3000, "status": ""}, "dns": {"ip": "0.0.0.0", "port": 53, "status": ""}, "password": "admin", "name": "admin"}'
+        "-d", '{"web": {"ip": "0.0.0.0", "port": 3000, "status": ""}, "dns": {"ip": "0.0.0.0", "port": 53, "status": ""}, "password": "admin123", "name": "admin"}'
     ]
     subprocess.run(curl_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     
