@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import os
+import importlib
 
 try:
     import config
@@ -14,16 +15,20 @@ except ImportError:
     config = None
 
 try:
-    import questionary
-    from questionary import Style
-    cai_theme = Style([
-        ('qmark', 'fg:#00ffff bold'),
-        ('question', 'fg:#ffffff bold'),
-        ('pointer', 'fg:#00ffff bold'),
-        ('highlighted', 'fg:#00ffff bold'),
-        ('selected', 'fg:#00ff00'),
-    ])
+    questionary = importlib.import_module('questionary')
+    Style = getattr(questionary, 'Style', None)
+    if Style:
+        cai_theme = Style([
+            ('qmark', 'fg:#00ffff bold'),
+            ('question', 'fg:#ffffff bold'),
+            ('pointer', 'fg:#00ffff bold'),
+            ('highlighted', 'fg:#00ffff bold'),
+            ('selected', 'fg:#00ff00'),
+        ])
+    else:
+        cai_theme = None
 except ImportError:
+    questionary = None
     cai_theme = None
 
 def _run(cmd, silent=False, ignore_errors=False):
