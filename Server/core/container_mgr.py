@@ -179,15 +179,31 @@ def deploy_caddy():
     _ensure_volume(config.VOL_CADDY_DATA)
     _ensure_volume(config.VOL_CADDY_CONF)
 
-    # Dynamic extraction of domains from config
-    domain_dsp = getattr(config, 'DOMAIN_DSP', 'dspserver.dcscai.lan')
-    domain_ai = getattr(config, 'DOMAIN_AI', 'ai.dcscai.lan')
-    domain_api = getattr(config, 'DOMAIN_API', 'api.dcscai.lan')
+    domain_dsp = getattr(config, 'DOMAIN_DSP', 'dsp.darde.lan')
+    domain_ai = getattr(config, 'DOMAIN_AI', 'ai.darde.lan')
+    domain_api = getattr(config, 'DOMAIN_API', 'api.darde.lan')
 
     print(f"[INFO] Writing dynamic routing rules for: {domain_dsp}, {domain_ai}, {domain_api}")
     
-    # File: DCS-CAI-SERVER/core/container_mgr.py
-# (Find caddyfile_content and replace it entirely)
+    # FIX: Isola il blocco di trasporto ed evita l'errore 500 in modalità Standalone
+    if getattr(config, 'NODE_ROLE', 'standalone') == 'gateway':
+        compute_ip = getattr(config, 'COMPUTE_NODE_IP', '127.0.0.1')
+        api_proxy_block = (
+            f"        reverse_proxy https://{compute_ip}:8443 {{\n"
+            f"                header_up Host \"localhost\"\n"
+            f"                header_up Origin \"http://localhost\"\n"
+            f"                transport http {{\n"
+            f"                        tls_insecure_skip_verify\n"
+            f"                }}\n"
+            f"        }}\n"
+        )
+    else:
+        api_proxy_block = (
+            f"        reverse_proxy 127.0.0.1:11434 {{\n"
+            f"                header_up Host \"localhost\"\n"
+            f"                header_up Origin \"http://localhost\"\n"
+            f"        }}\n"
+        )
 
     caddyfile_content = (
         f"{domain_dsp} {{\n"
@@ -203,10 +219,7 @@ def deploy_caddy():
         f"{domain_api} {{\n"
         f"        tls internal\n"
         f"        log\n"
-        f"        reverse_proxy 127.0.0.1:11434 {{\n"
-        f"                header_up Host \"localhost\"\n"
-        f"                header_up Origin \"http://localhost\"\n"
-        f"        }}\n"
+        f"{api_proxy_block}"
         f"}}\n"
     )
 
@@ -241,7 +254,7 @@ def deploy_caddy():
     if cert_ready:
         home_dir = os.path.expanduser("~")
         
-        # FIX: Multi-Node Architecture requires unique certificate names
+        
         node_name = getattr(config, 'NODE_NAME', 'master')
         machine_name = getattr(config, 'MACHINE_NAME', 'server')
         cert_filename = f"darde-{node_name}-{machine_name}-root.crt"
@@ -253,15 +266,15 @@ def deploy_caddy():
         current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
         subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", dest_cert], stdout=subprocess.DEVNULL)
         
-        
+
         print("\n\033[1;33m" + "="*70)
         print(" ACTION REQUIRED: HTTPS CERTIFICATE GENERATED")
         print("="*70)
         print(f" Your Unique DARDE Root CA has been saved to: \033[1;36m{dest_cert}\033[1;33m")
         print(" Run the automated Client Setup script on your end-user device.")
         print("="*70 + "\033[0m\n")
-      
-        
+
+
     else:
         print("[WARN] Could not locate Caddy root.crt inside the container.")
     
