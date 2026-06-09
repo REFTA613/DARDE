@@ -80,9 +80,24 @@ def show_domain_status():
     """
     Displays the configured domain names and their internal routing targets.
     """
+    import os
+    
+    # Recupera il nome esatto del sistema operativo leggendo i file di sistema Linux
+    os_name = "Linux"
+    if os.path.exists("/etc/os-release"):
+        with open("/etc/os-release") as f:
+            for line in f:
+                if line.startswith("PRETTY_NAME="):
+                    os_name = line.split("=")[1].strip().strip('"')
+                    break
+
     print("\n" + "="*50)
     print("[ ACTIVE DOMAIN ROUTING MAP ]")
     print("="*50)
+    # Stampa in giallo l'OS e il Base Domain per farli risaltare
+    print(f"  \033[1;33mHost OS:\033[0m     {os_name}")
+    print(f"  \033[1;33mBase Domain:\033[0m {config.DOMAIN_SUFFIX}")
+    print("-" * 50)
     print(f"  \033[96m{config.DOMAIN_DSP}\033[0m -> 127.0.0.1:9090 (Reserved)")
     print(f"  \033[96m{config.DOMAIN_AI}\033[0m  -> 127.0.0.1:8080 (Frontend WebUI)")
     print(f"  \033[96m{config.DOMAIN_API}\033[0m -> 127.0.0.1:11434 (Backend Ollama)")

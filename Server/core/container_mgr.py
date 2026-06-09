@@ -8,6 +8,7 @@ import time
 import os
 import config
 import socket
+import json
 from ai.model_mgr import select_initial_model
 
 def check_grc():
@@ -267,6 +268,24 @@ def deploy_caddy():
         print("[WARN] Could not locate Caddy root.crt inside the container.")
     
     configure_ufw()
+    print(f"[OK] Root Certificate secured at ~/{cert_filename}")
+        
+        # --- EXPORT CLIENT CONFIGURATION (JSON) ---
+        
+    client_json_path = os.path.join(home_dir, "darde_client_profile.json")
+    profile_data = {
+            "base_domain": config.DOMAIN_SUFFIX,
+            "ai_domain": config.DOMAIN_AI,
+            "api_domain": config.DOMAIN_API,
+            "dsp_domain": config.DOMAIN_DSP
+        }
+    with open("temp_profile.json", "w") as f:
+            json.dump(profile_data, f, indent=4)
+        
+    subprocess.run(["sudo", "mv", "temp_profile.json", client_json_path], stdout=subprocess.DEVNULL)
+    subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", client_json_path], stdout=subprocess.DEVNULL)
+    print(f"[OK] Client Profile JSON exported to ~/{os.path.basename(client_json_path)}")
+        # ------------------------------------------
 
 def _deploy_compute_proxy():
     """Deploys a lightweight internal TLS proxy to secure the Ollama API."""
