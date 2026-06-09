@@ -37,41 +37,48 @@ if [[ -z "$SERVER_IP" || -z "$SERVER_USER" ]]; then
     exit 1
 fi
 
-# --- 2. Smart Discovery (Fetch JSON & Cert) ---
-echo -e "\n\e[36m[1/6] Fetching Certificate and Topology Profile via SSH...\e[0m"
+# --- 2. Smart Discovery (Fetch JSON Profile) ---
+echo -e "\n\e[36m[1/6] Fetching Topology Profile via SSH...\e[0m"
 echo -e "\e[90m(You will be prompted for the SSH password)\e[0m"
 
-sudo -u "$REAL_USER" scp "${SERVER_USER}@${SERVER_IP}:~/darde-root.crt" "$TEMP_CERT"
 sudo -u "$REAL_USER" scp "${SERVER_USER}@${SERVER_IP}:~/darde_client_profile.json" "$TEMP_JSON"
 
-if [[ ! -f "$TEMP_CERT" || ! -f "$TEMP_JSON" ]]; then
-    echo -e "\e[31m[ERROR] Failed to download necessary files. Check password, IP, or ensure the server wizard has been completed.\e[0m"
+if [[ ! -f "$TEMP_JSON" ]]; then
+    echo -e "\e[31m[ERROR] Failed to download JSON profile. Ensure the server wizard has been completed.\e[0m"
     exit 1
 fi
 
-# Parse the Base Domain from the JSON file using python3
-BASE_DOMAIN=$(python3 -c "import sys, json; print(json.load(open('$TEMP_JSON'))['base_domain'])" 2>/dev/null)
+# Parse the Base Domain and extract Node/Machine names
+BASE_DOMAIN=$(python3 -c "import sys, json; print(json.load(open('$TEMP_JSON')).get('base_domain', ''))" 2>/dev/null)
+NODE_NAME=$(echo "$BASE_DOMAIN" | cut -d'.' -f1)
+MACHINE_NAME=$(echo "$BASE_DOMAIN" | cut -d'.' -f2)
 
-if [[ -z "$BASE_DOMAIN" ]]; then
+if [[ -z "$BASE_DOMAIN" || -z "$NODE_NAME" || -z "$MACHINE_NAME" ]]; then
     echo -e "\e[31m[ERROR] Failed to parse base_domain from JSON.\e[0m"
     exit 1
 fi
 
 echo -e "      -> \e[32m[OK] Topology discovered. Base Domain: $BASE_DOMAIN\e[0m"
-
-# Construct the required subdomains
 DOMAINS=("ai.$BASE_DOMAIN" "api.$BASE_DOMAIN" "dsp.$BASE_DOMAIN")
 
-# --- 3. Certificate Trust Installation ---
-echo -e "\n\e[36m[2/6] Installing DARDE Root CA in system trust store...\e[0m"
+# --- 3. Unique Certificate Trust Installation ---
+CERT_NAME="darde-${NODE_NAME}-${MACHINE_NAME}-root.crt"
+echo -e "\n\e[36m[2/6] Fetching Unique Node Certificate ($CERT_NAME)...\e[0m"
+
+sudo -u "$REAL_USER" scp "${SERVER_USER}@${SERVER_IP}:~/${CERT_NAME}" "$TEMP_CERT"
+
+if [[ ! -f "$TEMP_CERT" ]]; then
+    echo -e "\e[31m[ERROR] Failed to download certificate. Check if Core (Option 1) was installed on the server.\e[0m"
+    exit 1
+fi
 
 if command -v update-ca-certificates &> /dev/null; then
     # Debian/Ubuntu
-    cp "$TEMP_CERT" /usr/local/share/ca-certificates/darde-root.crt
+    cp "$TEMP_CERT" "/usr/local/share/ca-certificates/$CERT_NAME"
     update-ca-certificates > /dev/null 2>&1
 elif command -v update-ca-trust &> /dev/null; then
     # Arch/Fedora/CentOS
-    cp "$TEMP_CERT" /etc/ca-certificates/trust-source/anchors/darde-root.crt
+    cp "$TEMP_CERT" "/etc/ca-certificates/trust-source/anchors/$CERT_NAME"
     update-ca-trust > /dev/null 2>&1
 else
     echo -e "\e[33m[WARN] Could not detect certificate manager. Manual installation required.\e[0m"

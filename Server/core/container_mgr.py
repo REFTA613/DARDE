@@ -240,11 +240,11 @@ def deploy_caddy():
 
     if cert_ready:
         home_dir = os.path.expanduser("~")
-        hostname = socket.gethostname()
-        if hostname in ("localhost", "localhost.localdomain", ""):
-            hostname = "server"
-            
-        cert_filename = f"DCS-CAI-SERVER-{hostname}-root.crt"
+        
+        # FIX: Multi-Node Architecture requires unique certificate names
+        node_name = getattr(config, 'NODE_NAME', 'master')
+        machine_name = getattr(config, 'MACHINE_NAME', 'server')
+        cert_filename = f"darde-{node_name}-{machine_name}-root.crt"
         dest_cert = os.path.join(home_dir, cert_filename)
         
         subprocess.run(["sudo", "podman", "cp", f"{config.CONTAINER_CADDY}:{ca_internal_path}", dest_cert], stdout=subprocess.DEVNULL)
@@ -253,16 +253,15 @@ def deploy_caddy():
         current_user = current_user_proc.stdout.strip() if current_user_proc.returncode == 0 else "root"
         subprocess.run(["sudo", "chown", f"{current_user}:{current_user}", dest_cert], stdout=subprocess.DEVNULL)
         
-        # UI prompt to instruct the user about the HTTPS local certificate setup
+        
         print("\n\033[1;33m" + "="*70)
         print(" ACTION REQUIRED: HTTPS CERTIFICATE GENERATED")
         print("="*70)
-        print(f" Your local Root CA has been saved to: \033[1;36m{dest_cert}\033[1;33m")
-        print(" To remove the 'Not Secure' warning in your web browser, you MUST:")
-        print(" 1. Copy this .crt file to your Client device (Windows/Mac/iOS/Android).")
-        print(" 2. Install it in the OS 'Trusted Root Certification Authorities' store.")
-        print(" 3. Restart your web browser.")
+        print(f" Your Unique DARDE Root CA has been saved to: \033[1;36m{dest_cert}\033[1;33m")
+        print(" Run the automated Client Setup script on your end-user device.")
         print("="*70 + "\033[0m\n")
+      
+        
     else:
         print("[WARN] Could not locate Caddy root.crt inside the container.")
     

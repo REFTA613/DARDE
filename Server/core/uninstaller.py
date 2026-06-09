@@ -157,7 +157,8 @@ def run_uninstall_sequence():
 
         print("\n[INFO] -> 5/5 Cleaning up local environment and Topology state...")
         home_dir = os.path.expanduser("~")
-        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/darde-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
+        # FIX: Wildcard removal to support dynamic multi-node certificate names
+        _run(f"rm -f {home_dir}/caddy-root*.crt {home_dir}/darde-*-root.crt {home_dir}/darde_client_profile.json", silent=True, ignore_errors=True)
         
         # FIX: Eliminazione esplicita del file topology per resettare l'intero Wizard
         topology_file = getattr(config, 'TOPOLOGY_FILE', os.path.join(getattr(config, 'PROJECT_ROOT', os.getcwd()), 'topology.json'))
