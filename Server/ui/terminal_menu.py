@@ -6,12 +6,9 @@ Manages the terminal-based menu navigation and user input logic.
 import sys
 import os
 import socket
+import json
 
-from network.dns_proxy import deploy_network_config
-# ... (lascia gli altri import invariati) ...
-from core.uninstaller import run_uninstall_sequence
 from config import TOPOLOGY_FILE, load_topology, save_topology, NODE_ROLE
-
 from network.dns_proxy import deploy_network_config
 from network.geoblock import update_geoblock_zones
 from network.firewall import audit_firewall_and_ports
@@ -141,16 +138,12 @@ def show_main_menu():
                     print("\n[INFO] Operation aborted. Services are still running.")
 
             elif choice.startswith("9."):
-                # La logica del menu Soft/Bulldozer e le conferme di sicurezza 
-                # sono ora gestite interamente dentro il modulo uninstaller.py
                 run_uninstall_sequence()
 
             print("\n" + "="*50 + "\n")
 
         except KeyboardInterrupt:
             break
-
-# Aggiungi 'import json' all'inizio del file terminal_menu.py se non c'è
 
 def prompt_topology():
     print("\n\033[0;36m==========================================\033[0m")
@@ -192,18 +185,19 @@ def prompt_topology():
 
     save_topology(selected_role, node_name, machine_name, compute_ip)
     
-    # FIX: Generazione automatica del profilo per i Client (Smart Discovery)
-    import json
+    # =========================================================================
+    # FIX A: Generazione automatica del profilo per la Smart Discovery dei Client
+    # =========================================================================
     base_domain = f"{node_name}.{machine_name}.local"
     profile_data = {"base_domain": base_domain, "role": selected_role}
     home_dir = os.path.expanduser("~")
     profile_path = os.path.join(home_dir, "darde_client_profile.json")
+    
     try:
         with open(profile_path, "w") as f:
-            json.dump(profile_data, f)
-    except Exception:
-        pass # Fallback silenzioso se l'OS blocca la scrittura
+            json.dump(profile_data, f, indent=2)
+    except Exception as e:
+        print(f"\n[WARN] Impossibile generare il profilo client JSON: {e}")
 
     print(f"\n\033[1;32m[OK] Topology saved! Base domain: {base_domain}\033[0m\n")
     return selected_role
-
