@@ -275,7 +275,9 @@ def deploy_ai_stack(ram_limit_gb=4):
     
     _run_podman(["rm", "-f", config.CONTAINER_WEBUI, config.CONTAINER_OLLAMA], ignore_errors=True)
     
-    _ensure_volume(config.VOL_OLLAMA)
+    # FIX: Create the physical directory for the Ollama bind mount to bypass OverlayFS
+    subprocess.run(["mkdir", "-p", config.OLLAMA_BIND_MOUNT], stdout=subprocess.DEVNULL)
+    # Ensure the WebUI volume still exists as a standard volume
     _ensure_volume(config.VOL_WEBUI)
 
     print(f"[INFO] Starting AI Backend ({config.CONTAINER_OLLAMA})...")
@@ -284,7 +286,8 @@ def deploy_ai_stack(ram_limit_gb=4):
         "--net=host",
         "-e", "OLLAMA_HOST=127.0.0.1:11434",
         "-e", "OLLAMA_KEEP_ALIVE=15m",
-        "-v", f"{config.VOL_OLLAMA}:/root/.ollama",
+        # FIX: Replaced the old virtual volume with the direct bind mount path
+        "-v", f"{config.OLLAMA_BIND_MOUNT}:/root/.ollama:Z",
         f"--memory={ram_limit_gb}g",
         f"--memory-swap={ram_limit_gb}g",
         "docker.io/ollama/ollama"
@@ -316,6 +319,7 @@ def deploy_ai_stack(ram_limit_gb=4):
     print("[OK] Level 2 AI Stack successfully deployed.")
 
     print("\n[INFO] Initializing AI Model Configuration...")
+    from ai.model_mgr import select_initial_model
     selected_model = select_initial_model()
 
     if selected_model and selected_model != "skip":
@@ -326,6 +330,7 @@ def deploy_ai_stack(ram_limit_gb=4):
         
         print(f"\n[OK] Model '{selected_model}' is successfully installed and ready to use!")
 
+        
 def stop_all_containers():
     """Executes a hard stop on active project containers to flush RAM."""
     print("\n[INFO] Sending SIGTERM to all infrastructure containers...")
