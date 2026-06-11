@@ -11,16 +11,16 @@ import config
 def install_watchdog():
     """
     Deploys a cron file in /etc/cron.d/ to trigger headless diagnostics.
-    Runs at system boot, every 9 minutes for health checks, and at midnight for Geo-Block updates.
+    Runs at system boot, every 7 minutes for health checks, and at midnight for Geo-Block updates.
     """
-    cron_file = "/etc/cron.d/dcs-cai-watchdog"
+    cron_file = "/etc/cron.d/darde-watchdog"
     
     # Calculate absolute paths to ensure cron executes correctly regardless of environment
     python_bin = os.path.join(config.PROJECT_ROOT, ".venv", "bin", "python")
     main_script = os.path.join(config.PROJECT_ROOT, "main.py")
     
-    log_file_health = "/var/log/dcs-cai-watchdog.log"
-    log_file_geoblock = "/var/log/dcs-cai-geoblock-update.log"
+    log_file_health = "/var/log/darde-watchdog.log"
+    log_file_geoblock = "/var/log/darde-geoblock-update.log"
 
     print("\n[INFO] Generating Watchdog cron directives...")
 
@@ -32,14 +32,14 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 # 1. Boot check: ensure infrastructure starts up cleanly
 @reboot root {python_bin} {main_script} --watchdog >> {log_file_health} 2>&1
 
-# 2. Pulse check: verify container health every 9 minutes
-*/9 * * * * root {python_bin} {main_script} --watchdog >> {log_file_health} 2>&1
+# 2. Pulse check: verify container health every 7 minutes
+*/7 * * * * root {python_bin} {main_script} --watchdog >> {log_file_health} 2>&1
 
 # 3. Nightly Maintenance: silently update Geo-Block IPs at 00:00 (Midnight)
 0 0 * * * root {python_bin} {main_script} --update-geoblock >> {log_file_geoblock} 2>&1
 """
     
-    tmp_path = "/tmp/cai_watchdog_cron"
+    tmp_path = "/tmp/darde_watchdog_cron"
     with open(tmp_path, "w") as f:
         f.write(cron_content)
     
@@ -64,11 +64,10 @@ def run_diagnostics():
     
     # Extract dynamic container names safely
     targets = [
-        getattr(config, 'CONTAINER_ADGUARD', 'cai-adguard'),
-        getattr(config, 'CONTAINER_CADDY', 'cai-caddy'),
-        getattr(config, 'CONTAINER_OLLAMA', 'cai-ollama'),
-        getattr(config, 'CONTAINER_WEBUI', 'cai-webui'),
-
+        getattr(config, 'CONTAINER_ADGUARD', 'darde-adguard'),
+        getattr(config, 'CONTAINER_CADDY', 'darde-caddy'),
+        getattr(config, 'CONTAINER_OLLAMA', 'darde-ollama'),
+        getattr(config, 'CONTAINER_WEBUI', 'darde-webui'),
     ]
     
     for container in targets:

@@ -100,7 +100,7 @@ function install_client() {
     echo -e "\n\e[36m[3/6] Writing local DNS routes (/etc/hosts)...\e[0m"
     for DOMAIN in "${DOMAINS[@]}"; do
         if ! grep -q "\b$DOMAIN\b" "$HOSTS_FILE"; then
-            echo -e "${SERVER_IP}\t${DOMAIN}" >> "$HOSTS_FILE"
+            echo -e "${SERVER_IP}\t${DOMAIN}\t# DARDE-CLIENT" >> "$HOSTS_FILE"
             echo -e "      -> \e[32m[OK] Route added: $DOMAIN\e[0m"
         else
             echo -e "      -> \e[90mRoute already configured: $DOMAIN\e[0m"
@@ -112,7 +112,6 @@ function install_client() {
     
     read -p "Set new AdGuard Admin Username: " ADG_USER
     
-    # Ciclo di validazione password (minimo 7 caratteri)
     ADG_PASS=""
     while [ ${#ADG_PASS} -lt 7 ]; do
         read -s -p "Set new AdGuard Admin Password (min 7 characters): " ADG_PASS
@@ -122,15 +121,51 @@ function install_client() {
         fi
     done
 
-    # Generate payload dynamically... (il resto del codice rimane uguale)
     PAYLOAD=$(printf '{"web": {"ip": "0.0.0.0", "port": 3000, "status": ""}, "dns": {"ip": "0.0.0.0", "port": 53, "status": ""}, "password": "%s", "name": "%s"}' "$ADG_PASS" "$ADG_USER")
-    # ...
+    
+    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://${SERVER_IP}:3000/control/install/configure" -H "Content-Type: application/json" -d "$PAYLOAD")
+    HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+    BODY=$(echo "$RESPONSE" | sed '$d')
+
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo -e "      -> \e[32m[OK] Initialization completed. Port 53 unlocked.\e[0m"
+    elif [ "$HTTP_CODE" = "400" ] && [[ "$BODY" == *"already configured"* ]]; then
+        echo -e "      -> \e[90m[INFO] Gateway Firewall is already configured. Proceeding...\e[0m"
+    else
+        echo -e "      -> \e[31m[ERROR] Firewall configuration failed. HTTP Code: $HTTP_CODE\e[0m"
+        echo -e "      -> \e[31m[DETAILS] $BODY\e[0m"
+        echo -e "      -> \e[33m[ACTION] Please configure AdGuard manually at http://${SERVER_IP}:3000\e[0m"
+    fi
+
+    # --- 5. Python Virtual Environment ---
+    echo -e "\n\e[36m[5/6] Configuring Python Virtual Environment (Sandbox)...\e[0m"
+    mkdir -p "$WORK_DIR"
+    chown "$REAL_USER:$REAL_USER" "$WORK_DIR"
+    if [ ! -d "$VENV_DIR" ]; then
+        sudo -u "$REAL_USER" python3 -m venv "$VENV_DIR"
+        echo -e "      -> \e[32m[OK] Sandbox created.\e[0m"
+    fi
+
+    echo -e "      -> Injecting AI dependencies (ChromaDB)... Please wait."
+    sudo -u "$REAL_USER" "$VENV_DIR/bin/pip" install --upgrade pip > /dev/null 2>&1
+    if sudo -u "$REAL_USER" "$VENV_DIR/bin/pip" install chromadb sentence-transformers > /dev/null 2>&1; then
+        echo -e "      -> \e[32m[OK] Libraries installed successfully.\e[0m"
+    else
+        echo -e "\e[31m      -> [ERROR] Error during package installation.\e[0m"
+    fi
 
     # --- 6. Dashboard HTML ---
     echo -e "\n\e[36m[6/6] Creating Desktop Command Center...\e[0m"
-    DESKTOP_DIR="$USER_HOME/Desktop"
+    
+    # OS Agnostic Desktop Detection (fixes issues with non-english systems)
+    if command -v xdg-user-dir &> /dev/null; then
+        DESKTOP_DIR=$(sudo -u "$REAL_USER" xdg-user-dir DESKTOP)
+    else
+        DESKTOP_DIR="$USER_HOME/Desktop"
+    fi
+    
     DASHBOARD_PATH="$DESKTOP_DIR/DARDE_Dashboard.html"
-    mkdir -p "$DESKTOP_DIR"
+    sudo -u "$REAL_USER" mkdir -p "$DESKTOP_DIR"
 
     cat <<EOF > "$DASHBOARD_PATH"
 <!DOCTYPE html>
@@ -192,14 +227,19 @@ function uninstall_client() {
     # Remove from System Trust
     rm -f /usr/local/share/ca-certificates/darde-*.crt
     rm -f /etc/ca-certificates/trust-source/anchors/darde-*.crt
-    if command -v update-ca-certificates &> /dev/null; then update-ca-certificates > /dev/null 2>&1; fi
-    if command -v update-ca-trust &> /dev/null; then update-ca-trust > /dev/null 2>&1; fi
+    if command -v update-ca-certificates &> /dev/null; then update-ca-certificates --fresh > /dev/null 2>&1; fi
+    if command -v update-ca-trust &> /dev/null; then update-ca-trust extract > /dev/null 2>&1; fi
 
     # 2. Clean Hosts File
     echo -e "\n\e[36m[2/4] Cleaning Hosts File...\e[0m"
-    sed -i '/\.darde\.lan/d' "$HOSTS_FILE"
-    sed -i '/\.local/d' "$HOSTS_FILE" 
-    echo -e "      -> \e[32m[OK] Routes removed.\e[0m"
+    sed -i '/# DARDE-CLIENT/d' "$HOSTS_FILE"
+    
+    # Safe cleanup for older installations without breaking localhost.localdomain
+    sed -i '/ai\..*\.local/d' "$HOSTS_FILE"
+    sed -i '/api\..*\.local/d' "$HOSTS_FILE"
+    sed -i '/dsp\..*\.local/d' "$HOSTS_FILE"
+    
+    echo -e "      -> \e[32m[OK] Routes removed safely.\e[0m"
 
     # 3. Remove Python Environment
     echo -e "\n\e[36m[3/4] Removing Python Environment...\e[0m"
@@ -212,11 +252,16 @@ function uninstall_client() {
 
     # 4. Remove Dashboard HTML
     echo -e "\n\e[36m[4/4] Removing Dashboard HTML...\e[0m"
-    DESKTOP_DIR="$USER_HOME/Desktop"
+    if command -v xdg-user-dir &> /dev/null; then
+        DESKTOP_DIR=$(sudo -u "$REAL_USER" xdg-user-dir DESKTOP)
+    else
+        DESKTOP_DIR="$USER_HOME/Desktop"
+    fi
     DASHBOARD_PATH="$DESKTOP_DIR/DARDE_Dashboard.html"
+    
     if [ -f "$DASHBOARD_PATH" ]; then
         rm -f "$DASHBOARD_PATH"
-        echo -e "      -> \e[32m[OK] Dashboard removed.\e[0m"
+        echo -e "      -> \e[32m[OK] Dashboard removed from Desktop.\e[0m"
     else
         echo -e "      -> \e[90mNo dashboard found.\e[0m"
     fi
