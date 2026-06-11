@@ -1,10 +1,9 @@
 #!/bin/bash
 # ==============================================================================
 # DARDE-CLIENT: Connection & Certificate Setup (Linux)
-# Features: Smart JSON Discovery, Auto-Sudo, NSS DB Injection & Uninstaller
+# Features: Smart JSON Discovery, Auto-Sudo, Enterprise Firefox Policy & Auto-Prov
 # ==============================================================================
 
-# Ensure the script is run as root, auto-elevate if necessary
 if [ "$EUID" -ne 0 ]; then
   echo -e "\e[33m[INFO] Root privileges required. Elevating automatically with sudo...\e[0m"
   exec sudo bash "$0" "$@"
@@ -66,7 +65,7 @@ function install_client() {
         exit 1
     fi
 
-    # System DB
+    # 2a. System OS Database (Fixes Chrome, Chromium, Edge, OS tools)
     if command -v update-ca-certificates &> /dev/null; then
         cp "$TEMP_CERT" "/usr/local/share/ca-certificates/$CERT_NAME"
         update-ca-certificates > /dev/null 2>&1
@@ -75,26 +74,33 @@ function install_client() {
         update-ca-trust > /dev/null 2>&1
     fi
 
-    # NSS DB for Browsers
-    if ! command -v certutil &> /dev/null; then
-        echo -e "      [INFO] NSS tools missing on the client. Installing certutil..."
-        if command -v pacman &> /dev/null; then pacman -S --noconfirm nss > /dev/null
-        elif command -v apt-get &> /dev/null; then apt-get install -y libnss3-tools > /dev/null; fi
-    fi
+    # 2b. Firefox Enterprise Policy Injection (Forces Firefox to read OS Certificates)
+    echo -e "      [INFO] Applying Enterprise Policies for Firefox Sandbox..."
+    
+    POLICY_JSON='{"policies": {"Certificates": {"ImportEnterpriseRoots": true}}}'
+    
+    # Arch/Fedora typical path
+    mkdir -p "/usr/lib/firefox/distribution"
+    echo "$POLICY_JSON" > "/usr/lib/firefox/distribution/policies.json"
+    
+    # Debian/Ubuntu/Snap typical path
+    mkdir -p "/etc/firefox/policies"
+    echo "$POLICY_JSON" > "/etc/firefox/policies/policies.json"
 
+    # 2c. Legacy NSS DB Fallback
     if command -v certutil &> /dev/null; then
-        if [ -d "$USER_HOME/.pki/nssdb" ]; then
-            sudo -u "$REAL_USER" certutil -A -d sql:"$USER_HOME/.pki/nssdb" -n "$CERT_NAME" -t "C,," -i "$TEMP_CERT" >/dev/null 2>&1
-        fi
-        find "$USER_HOME/.mozilla/firefox" -name "cert9.db" 2>/dev/null | while read -r certdb; do
-            p_dir=$(dirname "$certdb")
-            sudo -u "$REAL_USER" certutil -A -d sql:"$p_dir" -n "$CERT_NAME" -t "C,," -i "$TEMP_CERT" >/dev/null 2>&1
+        FF_PATHS=("$USER_HOME/.mozilla/firefox" "$USER_HOME/snap/firefox/common/.mozilla/firefox" "$USER_HOME/.var/app/org.mozilla.firefox/.mozilla/firefox")
+        for FF_BASE in "${FF_PATHS[@]}"; do
+            find "$FF_BASE" -name "cert9.db" 2>/dev/null | while read -r certdb; do
+                p_dir=$(dirname "$certdb")
+                sudo -u "$REAL_USER" certutil -A -d sql:"$p_dir" -n "$CERT_NAME" -t "C,," -i "$TEMP_CERT" >/dev/null 2>&1
+            done
         done
-        echo -e "      -> \e[32m[OK] Certificate successfully injected into Browser databases.\e[0m"
     fi
 
     rm -f "$TEMP_CERT"
     rm -f "$TEMP_JSON"
+    echo -e "      -> \e[32m[OK] Certificate successfully injected into OS and Browsers.\e[0m"
 
     # --- 3. Hosts File Routing ---
     echo -e "\n\e[36m[3/6] Writing local DNS routes (/etc/hosts)...\e[0m"
@@ -157,7 +163,6 @@ function install_client() {
     # --- 6. Dashboard HTML ---
     echo -e "\n\e[36m[6/6] Creating Desktop Command Center...\e[0m"
     
-    # OS Agnostic Desktop Detection (fixes issues with non-english systems)
     if command -v xdg-user-dir &> /dev/null; then
         DESKTOP_DIR=$(sudo -u "$REAL_USER" xdg-user-dir DESKTOP)
     else
@@ -207,13 +212,17 @@ function uninstall_client() {
     fi
 
     # 1. Remove Certificates from NSS
-    echo -e "\n\e[36m[1/4] Removing Certificates from Browser Databases...\e[0m"
+    echo -e "\n\e[36m[1/4] Removing Certificates from System and Browser Databases...\e[0m"
+    
+    rm -f "/usr/lib/firefox/distribution/policies.json"
+    rm -f "/etc/firefox/policies/policies.json"
+    
     if command -v certutil &> /dev/null; then
         CERT_LIST=$(sudo -u "$REAL_USER" certutil -L -d sql:"$USER_HOME/.pki/nssdb" 2>/dev/null | grep "darde-" | awk '{print $1}')
         for cert in $CERT_LIST; do
             sudo -u "$REAL_USER" certutil -D -n "$cert" -d sql:"$USER_HOME/.pki/nssdb" >/dev/null 2>&1
         done
-
+        # Legacy cleanup
         find "$USER_HOME/.mozilla/firefox" -name "cert9.db" 2>/dev/null | while read -r certdb; do
             p_dir=$(dirname "$certdb")
             CERT_LIST=$(sudo -u "$REAL_USER" certutil -L -d sql:"$p_dir" 2>/dev/null | grep "darde-" | awk '{print $1}')
@@ -221,24 +230,21 @@ function uninstall_client() {
                 sudo -u "$REAL_USER" certutil -D -n "$cert" -d sql:"$p_dir" >/dev/null 2>&1
             done
         done
-        echo -e "      -> \e[32m[OK] Certificates removed from NSS databases.\e[0m"
     fi
 
-    # Remove from System Trust
     rm -f /usr/local/share/ca-certificates/darde-*.crt
     rm -f /etc/ca-certificates/trust-source/anchors/darde-*.crt
     if command -v update-ca-certificates &> /dev/null; then update-ca-certificates --fresh > /dev/null 2>&1; fi
     if command -v update-ca-trust &> /dev/null; then update-ca-trust extract > /dev/null 2>&1; fi
+    
+    echo -e "      -> \e[32m[OK] Certificates and Policies removed.\e[0m"
 
     # 2. Clean Hosts File
     echo -e "\n\e[36m[2/4] Cleaning Hosts File...\e[0m"
     sed -i '/# DARDE-CLIENT/d' "$HOSTS_FILE"
-    
-    # Safe cleanup for older installations without breaking localhost.localdomain
     sed -i '/ai\..*\.local/d' "$HOSTS_FILE"
     sed -i '/api\..*\.local/d' "$HOSTS_FILE"
     sed -i '/dsp\..*\.local/d' "$HOSTS_FILE"
-    
     echo -e "      -> \e[32m[OK] Routes removed safely.\e[0m"
 
     # 3. Remove Python Environment

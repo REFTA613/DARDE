@@ -69,25 +69,30 @@ def wait_for_service_startup(port, host='127.0.0.1', retries=300, delay=2):
 def configure_ufw():
     """
     Applies UFW firewall rules automatically to secure the infrastructure.
+    Forces all traffic through Caddy by blocking backend ports from the outside.
     """
-    print("\n[INFO] Hardening System Firewall (UFW)...")
+    print("\n[INFO] Hardening System Firewall (UFW) - Zero-Trust Mode...")
     ufw_commands = [
         ["ufw", "--force", "enable"],
-        ["ufw", "limit", "22/tcp"],     
-        ["ufw", "allow", "80/tcp"],     
-        ["ufw", "allow", "443/tcp"],    
-        ["ufw", "allow", "53/tcp"],     
-        ["ufw", "allow", "53/udp"],     
-        ["ufw", "allow", "3000/tcp"],   
-        ["ufw", "allow", "8080/tcp"],   
-        ["ufw", "allow", "11434/tcp"]   
+        ["ufw", "limit", "22/tcp"],     # SSH 
+        ["ufw", "allow", "80/tcp"],     # HTTP (Only for Caddy to auto-redirect to HTTPS)
+        ["ufw", "allow", "443/tcp"],    # HTTPS (Caddy Secure Gateway)
+        ["ufw", "allow", "53/tcp"],     # DNS AdGuard
+        ["ufw", "allow", "53/udp"]      # DNS AdGuard
     ]
     
-    for cmd in ufw_commands:
+    # FIX: Explicitly DENY backend ports so they cannot be bypassed via direct HTTP IP
+    deny_commands = [
+        ["ufw", "deny", "3000/tcp"],    # Block direct AdGuard HTTP
+        ["ufw", "deny", "8080/tcp"],    # Block direct WebUI HTTP
+        ["ufw", "deny", "11434/tcp"]    # Block direct Ollama API HTTP
+    ]
+    
+    for cmd in ufw_commands + deny_commands:
         subprocess.run(["sudo"] + cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         
     subprocess.run(["sudo", "ufw", "reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print("[OK] Firewall rules strictly applied and UFW reloaded.")
+    print("[OK] Firewall rules strictly applied. HTTP bypass is now impossible.")
 
 def _run_podman(cmd, ignore_errors=False, capture_output=False, silent=False, **kwargs):
     """Executes Podman tasks natively to preserve TTY progress bars."""
