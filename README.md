@@ -70,7 +70,7 @@ The project is primarily an **infrastructure and systems engineering project**, 
 DARDE is designed around a distributed local infrastructure composed of clients,
 gateway nodes and compute nodes.
 
-![DARDE Network Topology](docs/images/DARDE_Topology.jpeg)
+
 
 ## Standalone
 
