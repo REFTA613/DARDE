@@ -65,10 +65,12 @@ DARDE is being developed with the following goals:
 The project is primarily an **infrastructure and systems engineering project**, not an AI application.
 
 ---
+## Architecture
 
-# Architecture
+DARDE is designed around a distributed local infrastructure composed of clients,
+gateway nodes and compute nodes.
 
-DARDE currently defines three main node roles.
+![DARDE Network Topology](docs/images/DARDE_Topology.jpeg)
 
 ## Standalone
 
